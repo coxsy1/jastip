@@ -1,0 +1,655 @@
+Product Requirements Document: JastipOps
+Versi: 1.0 (Final untuk development MVP) · Status: Siap dikerjakan · Bahasa: Indonesia
+1. Ringkasan Produk
+Item
+Keterangan
+Nama produk
+JastipOps
+Deskripsi
+Aplikasi manajemen operasional jasa titip (jastip) berbasis web: REST API + Back Office Web App
+Masalah
+Pencatatan di Excel/WhatsApp rawan salah hitung, data pelanggan tercecer, status barang & pembayaran tidak jelas, margin tidak terpantau
+Tujuan
+Satu sistem terpusat untuk pelanggan, trip/batch, order, pembayaran, belanja lapangan, pengiriman, dan laporan margin
+Platform
+Web responsif (desktop untuk Owner/Admin, mobile-first untuk Shopper)
+1.1 Persona Pengguna
+Owner: kontrol penuh, melihat modal, margin, dan laporan.
+Admin Order / CS: input pelanggan & order, verifikasi pembayaran, input resi. Tidak melihat modal dan profit.
+Shopper: bekerja di toko lewat HP. Hanya melihat daftar belanja dan mengubah status barang.
+1.2 Tujuan & Metrik Keberhasilan
+Tujuan
+Metrik
+Target
+Menggantikan Excel/WA
+Order baru tercatat di sistem
+100% setelah 2 trip
+Akurasi tagihan
+Selisih tagihan vs kalkulasi manual
+0 rupiah
+Kecepatan input
+Waktu input 1 order (3 item)
+< 2 menit
+Efisiensi belanja
+Barang yang dicek langsung di toko lewat HP
+> 90%
+Performa
+Pencarian customer
+p95 < 300 ms
+1.3 Di Luar Lingkup (Non-Goals) v1
+Aplikasi untuk pelanggan (katalog, self-order, tracking publik).
+Integrasi payment gateway, WhatsApp API, dan API ekspedisi (cek resi otomatis).
+Multi-tenant (satu bisnis per instalasi), multi-bahasa, dan multi mata uang dalam satu order.
+Manajemen stok/gudang detail dan pembukuan akuntansi penuh.
+Item ini masuk Roadmap (bagian 13).
+2. Keputusan Produk & Teknis (Decision Log)
+Bagian ini merangkum keputusan yang saya ambil atas poin yang di PRD awal masih terbuka atau ambigu.
+#
+Topik
+Keputusan
+Alasan
+D1
+Backend framework
+Hono (bukan Express)
+Ringan, TypeScript-native, validasi & middleware rapi, mudah di-deploy ke Node/edge
+D2
+Validasi
+Zod untuk semua input, skema dibagi frontend–backend (monorepo)
+Satu sumber kebenaran tipe data
+D3
+Struktur repo
+Monorepo (pnpm workspace): apps/api, apps/web, packages/shared
+Berbagi tipe, enum, dan skema Zod
+D4
+Uang
+Semua nominal Rupiah disimpan sebagai integer (rupiah, tanpa desimal). Nominal mata uang asing & kurs sebagai Decimal(18,4)
+Hindari floating point error
+D5
+Pembulatan
+Harga IDR per item dibulatkan ke atas ke Rp 100 terdekat (configurable di setting trip)
+Praktik umum jastip, tagihan rapi
+D6
+Kurs
+Snapshot kurs di level item saat order dibuat. Perubahan kurs trip tidak mengubah order lama kecuali Owner menjalankan aksi "Hitung ulang"
+Menjaga riwayat tagihan dan margin akurat
+D7
+Dua jenis kurs
+sell_rate (kurs jual ke pelanggan) dan cost_rate (kurs modal aktual Owner)
+Margin (selisih kurs) bisa dihitung benar
+D8
+Pembayaran
+Tabel payments terpisah (bukan kolom paid_amount di order). paid_amount dan status pembayaran adalah hasil turunan
+Mendukung DP bertahap, banyak bukti transfer, refund, dan audit
+D9
+Refund
+Item OUT_OF_STOCK dikeluarkan dari tagihan. Kelebihan bayar menjadi status OVERPAID dan dicatat sebagai pembayaran bertipe REFUND saat dikembalikan. Riwayat pembayaran tidak pernah diubah/dihapus
+Memenuhi acceptance criteria integritas
+D10
+Autentikasi
+JWT access token (15 menit) + refresh token (7 hari, httpOnly cookie, bisa direvoke). Password bcrypt cost 12
+Lebih aman dari token tunggal berumur panjang
+D11
+Penyimpanan file
+Supabase Storage: bucket privat untuk bukti transfer (signed URL), bucket publik-terbatas untuk foto barang. Cloudinary tidak dipakai di v1
+Satu vendor dengan DB (jika memakai Supabase Postgres), kontrol akses lebih baik untuk bukti transfer
+D12
+Hapus data
+Soft delete (deleted_at) untuk customer, order, dan trip. User cukup is_active
+Data keuangan tidak boleh hilang
+D13
+Audit
+Tabel audit_logs untuk perubahan sensitif (harga, kurs, pembayaran, role, status)
+Pelacakan siapa mengubah apa
+D14
+Hak lihat modal
+Field modal (cost_*, profit) dihapus dari response API untuk role selain Owner (bukan sekadar disembunyikan di UI)
+Keamanan sisi server
+D15
+Label customer
+Enum REGULAR, VIP, WARNING ditampilkan sebagai "Regular", "VIP", "Wajib DP". Tidak ada label "Blacklist" di UI
+Netral dan aman secara bahasa; aturan Wajib DP ditegakkan sistem
+D16
+Aturan Wajib DP
+Pelanggan WARNING tidak bisa mengonfirmasi order sebelum DP minimal (default 50%, bisa diatur) tercatat
+Menerjemahkan label menjadi proteksi nyata
+D17
+Pagination
+Cursor/offset pagination dengan limit default 20, maksimum 100
+Konsistensi dan performa
+D18
+Zona waktu
+Simpan UTC, tampilkan WIB (Asia/Jakarta)
+Hindari bug tanggal PO
+3. Arsitektur & Stack Teknologi
+Lapisan
+Teknologi
+Bahasa
+TypeScript (frontend & backend)
+Backend
+Node.js 20 LTS + Hono, Zod, @hono/zod-validator
+Database
+PostgreSQL 16 + Prisma ORM (migrasi via prisma migrate)
+Auth
+JWT + refresh token, bcrypt, RBAC middleware
+Frontend
+React + Vite + Tailwind CSS + shadcn/ui, TanStack Query, React Hook Form + Zod, React Router
+Storage
+Supabase Storage
+Observability
+Pino (structured log), Sentry (error tracking), endpoint /health
+Testing
+Vitest (unit & integrasi API), Playwright (E2E alur kritis), database test via container
+CI/CD
+GitHub Actions: lint, typecheck, test, migrasi, deploy
+Deployment
+API di Railway/Render/VPS (Docker); web di Vercel/Cloudflare Pages; DB di Supabase/Neon
+Dokumentasi API
+OpenAPI/Swagger dihasilkan dari skema Zod
+Struktur backend (modular): modules/<nama>/{route, service, repository, schema}. Logika bisnis (hitung total, refund, status) hanya berada di service, bukan di route atau frontend.
+4. Peran & Matriks Hak Akses (RBAC)
+Kemampuan
+Owner
+Admin
+Shopper
+Kelola user (CRUD, role, reset password, nonaktif)
+✓
+✗
+✗
+CRUD customer
+✓
+✓
+✗
+Buat/ubah trip & ubah kurs
+✓
+Lihat saja
+✗
+Buat & ubah order
+✓
+✓
+✗
+Catat pembayaran & unggah bukti
+✓
+✓
+✗
+Verifikasi pembayaran
+✓
+✓
+✗
+Batalkan order / catat refund
+✓
+Ajukan, Owner setujui
+✗
+Input resi & ongkir
+✓
+✓
+✗
+Lihat harga jual IDR & fee
+✓
+✓
+✗
+Lihat modal aktual & profit
+✓
+✗
+✗
+Lihat Shopping List
+✓
+✓
+✓
+Ubah status item (Pending → Dibeli/Kosong)
+✓
+✓
+✓
+Dashboard keuangan & laporan
+✓
+Ringkasan operasional saja
+✗
+Audit log
+✓
+✗
+✗
+Data yang dilihat Shopper: nama barang, merek, varian, foto, qty, catatan item, harga referensi dalam mata uang asing, dan kode order. Shopper tidak melihat data pribadi pelanggan (nama lengkap, WA, alamat) maupun harga IDR dan fee.
+Aturan umum: akses tanpa token → 401; token valid tetapi role tidak berhak → 403. Penegakan dilakukan di middleware per route, bukan hanya UI.
+5. Spesifikasi Fungsional
+Prioritas: P0 wajib MVP, P1 penting (rilis berikutnya), P2 nice-to-have.
+Fase 1: Fondasi (User & Customer)
+Modul 1: Autentikasi & Manajemen User
+ID
+Kebutuhan
+Prioritas
+AUTH-1
+Login email + password; respons berisi access token dan set refresh token cookie
+P0
+AUTH-2
+Endpoint refresh & logout (revoke refresh token)
+P0
+AUTH-3
+Profil me dan ubah password sendiri (wajib password lama)
+P0
+AUTH-4
+Pembatasan percobaan login: 5 gagal/15 menit per IP+email, lalu cooldown
+P0
+AUTH-5
+Kebijakan password: minimal 8 karakter, wajib huruf & angka
+P0
+USR-1
+Owner membuat user (nama, email, role, password awal), memaksa ganti password saat login pertama
+P0
+USR-2
+Ubah data & role; reset password oleh Owner
+P0
+USR-3
+Nonaktifkan/aktifkan akun; akun nonaktif tidak bisa login dan token aktifnya ditolak
+P0
+USR-4
+Minimal harus ada satu Owner aktif; Owner terakhir tidak bisa dinonaktifkan atau diturunkan role-nya
+P0
+USR-5
+Seed akun Owner awal lewat script/variabel lingkungan
+P0
+Modul 2: Manajemen Customer (CRM)
+ID
+Kebutuhan
+Prioritas
+CUS-1
+CRUD customer: nama, WA (unik, dinormalisasi ke format 62xxxxxxxxxx), akun IG/TikTok, alamat lengkap, kota, provinsi, kode pos, penerima (jika beda), catatan
+P0
+CUS-2
+Label: Regular, VIP, Wajib DP (lihat D15–D16)
+P0
+CUS-3
+Pencarian berdasarkan nama atau nomor WA (partial, case-insensitive); filter label
+P0
+CUS-4
+Riwayat transaksi: daftar order, total nilai belanja (hanya order tidak dibatalkan), total belum lunas
+P0
+CUS-5
+Deteksi duplikat WA saat input dengan pesan jelas; "tambah cepat" dari form order hanya butuh nama + WA
+P0
+CUS-6
+Alamat tersimpan sebagai snapshot pada order saat dibuat, sehingga perubahan alamat tidak mengubah order lama
+P1
+CUS-7
+Impor customer dari CSV/Excel dengan pratinjau & laporan error
+P1
+CUS-8
+Soft delete customer; customer yang punya order tidak bisa dihapus permanen
+P0
+Fase 2: Operasional Inti
+Modul 3: Manajemen Trip / Batch
+ID
+Kebutuhan
+Prioritas
+TRP-1
+CRUD trip: judul, negara/kota tujuan, tanggal buka PO, tanggal tutup PO, estimasi tanggal belanja, estimasi tanggal kirim
+P0
+TRP-2
+Pengaturan mata uang (ISO 4217), sell_rate ke pelanggan, cost_rate (diisi Owner, opsional sampai belanja), default fee jastip (nominal tetap atau persentase), aturan pembulatan
+P0
+TRP-3
+Fee per item dapat di-override saat input order
+P0
+TRP-4
+Status trip dan transisi: OPEN → SHOPPING → SHIPPING → COMPLETED (hanya maju; mundur oleh Owner dengan alasan tercatat)
+P0
+TRP-5
+Order baru hanya bisa dibuat saat status OPEN dan dalam rentang tanggal PO; Owner dapat override dengan alasan
+P0
+TRP-6
+Saat status berpindah ke SHOPPING, order DRAFT otomatis diperingatkan (tidak ikut terkunci)
+P1
+TRP-7
+Ubah kurs trip menampilkan dialog: "Terapkan hanya ke order baru" (default) atau "Hitung ulang order yang belum dibayar"
+P0
+TRP-8
+Duplikasi trip (salin pengaturan untuk batch berikutnya)
+P1
+Modul 4: Manajemen Order
+ID
+Kebutuhan
+Prioritas
+ORD-1
+Buat order: pilih/tambah customer, pilih trip aktif, tambah 1..N item. Nomor invoice otomatis, format JO-{KODETRIP}-{URUT4} (contoh JO-BKK12-0007), unik dan tidak bisa diubah
+P0
+ORD-2
+Detail item: nama, merek, varian, kategori, foto referensi (maks 5 MB, jpg/png/webp), harga asing per unit, qty (≥1), fee jastip per unit, catatan
+P0
+ORD-3
+Harga jual IDR dihitung otomatis dari harga asing × sell_rate snapshot, dibulatkan sesuai aturan trip; dapat di-override manual dengan penanda "manual"
+P0
+ORD-4
+Status item: PENDING, PURCHASED, OUT_OF_STOCK, ARRIVED (lihat state machine, bagian 7)
+P0
+ORD-5
+Total order dihitung otomatis: subtotal item aktif + ongkir − diskon (opsional)
+P0
+ORD-6
+Status order: DRAFT → CONFIRMED → PROCESSING → SHIPPED → DELIVERED, dan CANCELLED
+P0
+ORD-7
+Item tidak bisa ditambah/dihapus setelah order PROCESSING (hanya Owner, dengan audit). Item PURCHASED tidak bisa dihapus
+P0
+ORD-8
+Pembatalan order: wajib alasan; jika ada pembayaran, sistem membuat status OVERPAID sampai refund dicatat
+P0
+ORD-9
+Filter & pencarian order: trip, status order, status pembayaran, customer, kode invoice, rentang tanggal
+P0
+ORD-10
+Ringkasan order siap disalin (teks invoice untuk dikirim lewat WhatsApp)
+P1
+ORD-11
+Cetak/unduh invoice PDF
+P2
+Manajemen Pembayaran
+ID
+Kebutuhan
+Prioritas
+PAY-1
+Setiap pembayaran adalah satu baris: jumlah, metode (transfer/tunai/e-wallet), tanggal, tipe (DP, PELUNASAN, REFUND), catatan, bukti transfer
+P0
+PAY-2
+Bukti transfer opsional saat pencatatan, diunggah ke bucket privat; ditampilkan via signed URL berumur pendek
+P0
+PAY-3
+Status pembayaran dihitung otomatis: UNPAID (0), PARTIAL (0 < dibayar < tagihan), PAID (dibayar = tagihan), OVERPAID (dibayar > tagihan)
+P0
+PAY-4
+Sisa tagihan = total tagihan − total pembayaran (tidak termasuk refund yang sudah dikembalikan)
+P0
+PAY-5
+Pembayaran tidak bisa diedit atau dihapus. Koreksi dilakukan dengan membatalkan (void) disertai alasan, dan sistem mencatat pembayaran pengganti
+P0
+PAY-6
+Admin mencatat pembayaran berstatus PENDING_VERIFICATION; Owner/Admin senior memverifikasi. Hanya pembayaran terverifikasi yang menghitung ke status lunas (dapat dimatikan lewat setting)
+P1
+PAY-7
+Wajib DP untuk customer WARNING sebelum order bisa CONFIRMED
+P0
+Manajemen Pengiriman
+ID
+Kebutuhan
+Prioritas
+SHP-1
+Input ekspedisi, layanan, ongkos kirim, nomor resi, tanggal kirim, catatan
+P0
+SHP-2
+Ongkir ditambahkan ke total tagihan; mengubah ongkir setelah lunas memicu perhitungan sisa tagihan baru
+P0
+SHP-3
+Order tidak bisa SHIPPED bila ada item PENDING (kecuali Owner menandai item sebagai kosong atau dipisah)
+P0
+SHP-4
+Pengiriman parsial (split shipment)
+P2
+SHP-5
+Tautan lacak resi ke situs ekspedisi (tanpa integrasi API)
+P1
+Fase 3: Otomatisasi & Laporan
+Modul 5: Shopping List Generator
+ID
+Kebutuhan
+Prioritas
+SHL-1
+Menggabungkan semua item PENDING di satu trip (dari order CONFIRMED/PROCESSING) menjadi daftar terkelompok berdasarkan kategori lalu kombinasi nama+merek+varian
+P0
+SHL-2
+Setiap baris menampilkan total qty gabungan, foto, harga referensi asing, dan daftar order asal (kode order saja bagi Shopper)
+P0
+SHL-3
+Shopper dapat mengubah status per baris gabungan: Dibeli sebagian/seluruhnya dengan input qty_purchased, atau Kosong. Sistem mengalokasikan hasil ke item order asal berdasarkan urutan order (FIFO)
+P0
+SHL-4
+Shopper (atau Owner) dapat mengisi harga beli aktual per baris dan mengunggah foto struk
+P1
+SHL-5
+UI mobile-first: tombol besar, centang cepat, filter "belum dibeli", pencarian, dan toleransi koneksi buruk (antrean perubahan offline sederhana, lalu sinkron)
+P1
+SHL-6
+Ekspor daftar belanja ke PDF/teks
+P1
+SHL-7
+Daftar belanja hanya menyertakan order yang sudah CONFIRMED agar draft tidak ikut dibelanjakan
+P0
+Modul 6: Dashboard Ringkasan (per Trip)
+Metrik
+Definisi
+Akses
+Omzet kotor
+Σ total tagihan order aktif (tidak dibatalkan), tanpa ongkir
+Owner, Admin
+Total modal belanja
+Σ (harga beli aktual asing × qty × cost_rate); bila belum ada, memakai estimasi harga asing × cost_rate dan diberi penanda "estimasi"
+Owner
+Estimasi profit bersih
+Omzet kotor − total modal. Dirinci: total fee + selisih kurs + selisih harga
+Owner
+Order belum lunas
+Jumlah dan total sisa tagihan status UNPAID/PARTIAL/OVERPAID
+Owner, Admin
+Progres belanja
+% item (berdasarkan qty) berstatus PURCHASED/ARRIVED dari total item aktif
+Semua
+Kas masuk
+Σ pembayaran terverifikasi − refund
+Owner
+Item kosong & nilai refund
+Jumlah item OUT_OF_STOCK dan total refund
+Owner, Admin
+Tambahan (P1): grafik omzet per trip, top customer, top barang, ekspor laporan CSV/Excel.
+6. Aturan Bisnis & Rumus
+Notasi: FP harga asing per unit, SR sell_rate snapshot, CR cost_rate, fee fee per unit, qty jumlah.
+harga_jual_idr per unit = round_up(FP × SR, pembulatan_trip).
+total_item = (harga_jual_idr + fee) × qty. Item berstatus OUT_OF_STOCK bernilai 0 pada tagihan (nilai historis tetap tersimpan).
+subtotal_items = Σ total_item.
+total_tagihan = subtotal_items + ongkir − diskon.
+total_dibayar = Σ pembayaran sah (DP + pelunasan) − Σ refund yang dikembalikan.
+sisa_tagihan = total_tagihan − total_dibayar (negatif berarti kelebihan bayar).
+Profit item = total_item − (harga_beli_aktual_asing × qty × CR). Jika harga beli aktual kosong, pakai FP sebagai estimasi.
+Rincian profit: fee = fee × qty; selisih kurs = FP × qty × (SR − CR); selisih harga = sisanya (pembulatan, selisih harga beli aktual).
+Semua perhitungan dijalankan di service backend dalam satu transaksi database dan dihitung ulang setiap perubahan item/pembayaran/ongkir/kurs. Nilai total disimpan (denormalisasi) untuk performa, dengan pengecekan konsistensi harian.
+Refund otomatis (acceptance criteria #2): saat item → OUT_OF_STOCK, total tagihan dikurangi nilai item tersebut; jika total_dibayar > total_tagihan, order berstatus OVERPAID dan muncul tugas "Refund Rp X". Tidak ada baris pembayaran yang diubah.
+Order CANCELLED memiliki total tagihan 0 dan nilai historis disimpan pada snapshot.
+7. State Machine
+Item: PENDING → PURCHASED → ARRIVED; PENDING/PURCHASED → OUT_OF_STOCK. Pembalikan PURCHASED → PENDING diizinkan untuk Shopper dalam 10 menit (koreksi salah centang) dan selanjutnya hanya Owner/Admin. OUT_OF_STOCK → PENDING hanya Owner (barang ditemukan kembali) dan mencatat audit.
+Order: DRAFT → CONFIRMED → PROCESSING → SHIPPED → DELIVERED; CANCELLED dari status mana pun sebelum SHIPPED.
+PROCESSING otomatis ketika ada item pertama yang PURCHASED.
+SHIPPED mensyaratkan resi terisi dan tidak ada item PENDING.
+DELIVERED manual (atau otomatis bila ada setting).
+Trip: OPEN → SHOPPING → SHIPPING → COMPLETED.
+Setiap transisi tidak valid menghasilkan 409 Conflict dengan kode error INVALID_STATE_TRANSITION.
+8. Rancangan Database
+Semua tabel memiliki id UUID, created_at, updated_at. Tabel yang dapat dihapus lunak memiliki deleted_at.
+users: name, email (unik, lowercase), password_hash, role (OWNER/ADMIN/SHOPPER), is_active, must_change_password, last_login_at
+refresh_tokens: user_id, token_hash, expires_at, revoked_at, user_agent, ip
+customers: name, phone_wa (unik, ternormalisasi), social_media, address, city, province, postal_code, recipient_name, tag (REGULAR/VIP/WARNING), notes, deleted_at
+Indeks: unik phone_wa; indeks trigram (pg_trgm) GIN pada name dan phone_wa untuk pencarian < 300 ms.
+trips: code (unik, mis. BKK12), title, destination, currency_code, sell_rate, cost_rate, fee_type (FIXED/PERCENT), default_fee, rounding_idr, open_date, close_date, est_shopping_date, est_ship_date, status, deleted_at
+orders: invoice_code (unik), trip_id, customer_id, created_by, ship_name, ship_phone, ship_address (snapshot), subtotal_items, shipping_cost, discount, total_amount, paid_amount, payment_status (UNPAID/PARTIAL/PAID/OVERPAID), order_status, courier, courier_service, tracking_number, shipped_at, cancel_reason, notes, deleted_at
+Indeks: (trip_id, order_status), (customer_id), (payment_status).
+order_items: order_id, item_name, brand, variant, category, qty, qty_purchased, foreign_price, sell_rate_snapshot, sell_price_idr, price_is_manual, jastip_fee_idr, actual_cost_foreign (hanya Owner), item_status, image_url, notes
+Indeks: (order_id), (item_status).
+payments: order_id, type (DP/PELUNASAN/REFUND), amount (integer, positif), method, paid_at, proof_path, verification_status (PENDING/VERIFIED/VOID), verified_by, void_reason, recorded_by, notes
+audit_logs: actor_id, entity, entity_id, action, before (JSONB), after (JSONB), created_at
+app_settings (opsional): aturan DP minimum, jendela koreksi status, verifikasi pembayaran on/off.
+Relasi: user 1–N order; customer 1–N order; trip 1–N order; order 1–N order_items; order 1–N payments. Constraint CHECK untuk qty > 0, amount > 0, sell_rate > 0.
+9. Spesifikasi API (REST, prefix /api/v1)
+Konvensi: JSON, camelCase, tanggal ISO 8601 (UTC), header Authorization: Bearer <token>. Setiap perubahan pembayaran mendukung header Idempotency-Key untuk mencegah pencatatan ganda.
+Format error seragam:
+{ "error": { "code": "VALIDATION_ERROR", "message": "Nomor WhatsApp sudah terdaftar", "details": [ { "field": "phoneWa", "issue": "duplicate" } ] } }
+Kode HTTP: 200/201, 400/422 validasi, 401 belum login, 403 tidak berhak, 404, 409 konflik/transisi tidak valid, 429 rate limit, 500.
+Grup
+Endpoint
+Role
+Auth
+POST /auth/login, POST /auth/refresh, POST /auth/logout, GET /auth/me, PATCH /auth/me/password
+Semua
+Users
+GET, POST /users; GET, PATCH /users/:id; PATCH /users/:id/status; POST /users/:id/reset-password
+Owner
+Customers
+GET, POST /customers (query q, tag, page); GET, PATCH, DELETE /customers/:id; GET /customers/:id/orders
+Owner, Admin
+Trips
+GET, POST /trips; GET, PATCH /trips/:id; PATCH /trips/:id/status; POST /trips/:id/recalculate; GET /trips/:id/summary
+GET: Owner/Admin; tulis: Owner
+Shopping list
+GET /trips/:id/shopping-list ; PATCH /trips/:id/shopping-list/:groupKey (qty_purchased/status)
+Semua
+Orders
+GET, POST /orders; GET, PATCH, DELETE /orders/:id; PATCH /orders/:id/status; PATCH /orders/:id/shipping
+Owner, Admin
+Order items
+POST /orders/:id/items; PATCH, DELETE /order-items/:id; PATCH /order-items/:id/status
+Item CRUD: Owner/Admin; status: Semua
+Payments
+GET, POST /orders/:id/payments; POST /payments/:id/void; PATCH /payments/:id/verify; POST /uploads/payment-proof
+Owner, Admin
+Dashboard
+GET /dashboard/trips/:id
+Owner (lengkap), Admin (terbatas), Shopper (progres)
+Audit
+GET /audit-logs
+Owner
+System
+GET /health
+Publik
+Catatan perilaku:
+GET /orders/:id/payments dan lampiran bukti mengembalikan signed URL berumur 5 menit.
+Respons order untuk Admin tidak memuat actualCostForeign, costRate, maupun profit.
+PATCH /order-items/:id/status untuk Shopper hanya menerima field status (dan qtyPurchased); field lain ditolak 403.
+Perubahan item/pembayaran/ongkir selalu memicu perhitungan ulang total dalam satu transaksi.
+10. Alur Pengguna Utama
+Persiapan: Owner membuat trip (kurs, fee default) → status OPEN.
+Order masuk: Admin mencari/menambah customer → membuat order & item → kirim ringkasan invoice ke pelanggan → catat DP → order CONFIRMED.
+Belanja: Owner mengubah trip ke SHOPPING → Shopper membuka daftar belanja di HP → centang "Dibeli" atau "Kosong" → tagihan otomatis menyesuaikan.
+Penagihan: Admin melihat order PARTIAL/OVERPAID → catat pelunasan atau refund.
+Pengiriman: Admin input ongkir & resi → order SHIPPED → DELIVERED → trip COMPLETED.
+Evaluasi: Owner melihat dashboard profit per trip.
+11. Kebutuhan Non-Fungsional
+Aspek
+Persyaratan
+Performa
+Pencarian customer p95 < 300 ms (data hingga 50.000 customer); daftar order p95 < 500 ms; shopping list 1.000 item < 1 detik
+Keamanan
+HTTPS wajib; CORS whitelist; rate limit; header keamanan (Helmet/secure-headers); proteksi SQL injection via Prisma; validasi upload (tipe & ukuran, rename acak); sanitasi input; secret di environment variable
+Privasi
+Data pelanggan (WA, alamat) dilindungi RBAC; log tidak memuat password/token; mematuhi UU PDP (hak koreksi & penghapusan atas permintaan, dilakukan lewat anonimisasi)
+Ketersediaan
+Target 99,5%; backup database harian dengan retensi 14 hari dan uji restore tiap kuartal
+Integritas
+Transaksi database untuk operasi keuangan; optimistic locking (updated_at/versi) untuk mencegah dua staf menimpa data yang sama
+Skalabilitas
+Dirancang untuk 1 bisnis, ±200 order/trip dan 20 trip/tahun; mudah diperluas
+UX
+Responsif; Shopper view mobile-first; mode gelap tidak wajib; semua teks dalam Bahasa Indonesia; format Rupiah Rp 1.250.000
+Aksesibilitas
+Kontras memadai, target sentuh ≥ 44 px untuk tampilan Shopper
+Kualitas
+Cakupan test unit ≥ 80% pada service keuangan; E2E untuk alur order → bayar → belanja → refund
+Dokumentasi
+OpenAPI, README setup, .env.example, panduan deploy
+12. Kriteria Keberhasilan (Acceptance Criteria)
+#
+Kriteria
+Cara Uji
+AC1
+Shopper mendapat 403 saat mengakses endpoint keuangan (payments, dashboard keuangan, users, customers) dan tidak menerima field harga IDR, fee, modal, atau data pelanggan di respons daftar belanja
+Integration test per endpoint × role
+AC2
+Admin mendapat 403 untuk endpoint users dan field modal/profit tidak ada di semua respons Admin
+Test kontrak respons
+AC3
+Item menjadi OUT_OF_STOCK → total tagihan berkurang otomatis, riwayat pembayaran tidak berubah, dan jika dibayar > tagihan status menjadi OVERPAID dengan nilai refund benar
+Unit + integration test
+AC4
+Total, sisa tagihan, dan profit sama persis dengan kalkulasi referensi pada 20 skenario uji (termasuk pembulatan, kurs berubah, DP bertahap)
+Test tabel skenario
+AC5
+Mengubah kurs trip tidak mengubah total order lama kecuali aksi hitung ulang dijalankan
+Integration test
+AC6
+Pencarian customer (nama/WA, partial) < 300 ms pada 50.000 data
+Benchmark k6/pg_bench
+AC7
+Nomor WA duplikat ditolak (409/422) dan format dinormalisasi (0812…, +62812…, 62812… dianggap sama)
+Unit test
+AC8
+Pembayaran tidak dapat diedit/dihapus; hanya bisa di-void dengan alasan dan tercatat di audit log
+Integration test
+AC9
+Pengiriman permintaan pembayaran yang sama dengan Idempotency-Key identik tidak menciptakan pembayaran ganda
+Integration test
+AC10
+Transisi status tidak valid (mis. SHIPPED dengan item PENDING) ditolak dengan 409
+Unit test
+AC11
+Akun nonaktif tidak dapat login, dan token yang sudah terbit ditolak pada permintaan berikutnya
+Integration test
+AC12
+Pelanggan berlabel Wajib DP tidak dapat berpindah ke CONFIRMED tanpa DP minimal
+Integration test
+AC13
+Shopper dapat menyelesaikan 50 centang item dari HP pada jaringan 3G tanpa kehilangan data
+Uji manual + E2E
+13. Rencana Rilis & Roadmap
+Rilis
+Cakupan
+Estimasi
+Sprint 0
+Setup monorepo, CI, skema database, seed, auth dasar, deploy staging
+1 minggu
+Fase 1 (MVP-A)
+Modul 1 & 2 (semua P0)
+2 minggu
+Fase 2 (MVP-B)
+Modul 3 & 4 termasuk pembayaran, pengiriman, refund otomatis
+3–4 minggu
+Fase 3 (MVP-C)
+Modul 5 & 6, uji E2E, hardening keamanan, UAT dengan data trip nyata
+2–3 minggu
+v1.1
+Item P1: impor CSV, verifikasi pembayaran, invoice teks/PDF, mode offline Shopper, ekspor laporan
+Setelah rilis
+v2
+Portal pelanggan (cek status order), notifikasi WhatsApp, integrasi cek resi, split shipment, multi-currency per order
+Backlog
+Definition of Done: fitur lolos test otomatis, tercakup RBAC, terdokumentasi di OpenAPI, tidak ada error kritis di Sentry saat UAT, dan disetujui Owner.
+14. Risiko & Mitigasi
+Risiko
+Dampak
+Mitigasi
+Kesalahan hitung kurs/refund
+Kerugian finansial
+Logika terpusat di service, snapshot kurs, test skenario, audit log
+Kebocoran data modal/pelanggan
+Reputasi & hukum
+Filtering sisi server, signed URL, pembatasan role, review akses berkala
+Staf lama enggan pindah dari WA/Excel
+Adopsi rendah
+Input cepat, ringkasan invoice siap salin, pelatihan singkat, impor CSV
+Sinyal buruk di toko luar negeri
+Shopper tidak bisa update
+UI ringan, antrean offline (P1), cache daftar belanja
+Kehilangan data
+Operasional berhenti
+Backup harian, uji restore, soft delete
+Perubahan aturan bisnis di tengah trip
+Data tidak konsisten
+Snapshot data, hitung ulang eksplisit, audit
+15. Asumsi & Pertanyaan Terbuka
+Asumsi v1: satu mata uang per trip; satu bisnis per instalasi; pembayaran hanya dalam Rupiah; DP minimum default 50% untuk pelanggan Wajib DP; pembayaran dicatat manual berdasarkan bukti transfer.
+Perlu konfirmasi Owner (tidak menghalangi mulai development, sudah ada default):
+Apakah fee berupa nominal tetap, persentase, atau keduanya? (default: keduanya didukung per trip)
+Apakah pembayaran harus diverifikasi Owner sebelum dihitung lunas? (default: tidak, diaktifkan lewat setting)
+Apakah perlu invoice PDF bermerek di v1? (default: teks siap salin dulu)
+Berapa jumlah staf dan Shopper aktif, serta apakah Shopper memakai HP pribadi? (menentukan kebutuhan mode offline)
+Apakah ada pajak/bea masuk yang ditagihkan ke pelanggan? (default: tidak ada; dapat ditambah sebagai biaya tambahan di v1.1)
+Lampiran A: Daftar Kode Error
+VALIDATION_ERROR, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, DUPLICATE_PHONE, TRIP_CLOSED, INVALID_STATE_TRANSITION, PAYMENT_ALREADY_VOID, LAST_OWNER_PROTECTED, DP_REQUIRED, RATE_LIMITED, INTERNAL_ERROR.
+Lampiran B: Contoh Perhitungan
+Trip Bangkok: SR = 465, CR = 452, pembulatan Rp 100. Item: harga 890 THB, qty 2, fee Rp 25.000/unit.
+Harga jual/unit = 890 × 465 = 413.850 → dibulatkan Rp 413.900
+Total item = (413.900 + 25.000) × 2 = Rp 877.800
+Modal = 890 × 2 × 452 = Rp 804.560
+Profit = 877.800 − 804.560 = Rp 73.240 (fee Rp 50.000 + selisih kurs Rp 23.140 + pembulatan Rp 100)
+Jika pelanggan sudah DP Rp 500.000 lalu barang kosong: tagihan menjadi 0, status OVERPAID, refund Rp 500.000, riwayat DP tetap utuh.

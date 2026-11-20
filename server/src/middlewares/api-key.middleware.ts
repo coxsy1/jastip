@@ -25,11 +25,11 @@ export interface ApiKeyOptions {
 /**
  * Middleware to validate incoming request's 'x-api-key' header.
  * Only requests carrying a valid x-api-key can access protected endpoints.
- */
-export function validateApiKey(options: ApiKeyOptions = { allowHealthCheck: true }) {
+ */ 
+export function validateApiKey({ allowHealthCheck = true }: ApiKeyOptions = {}) {
   return async (c: Context, next: Next): Promise<Response | void> => {
     // Optionally allow health check endpoint for monitoring/uptime probes
-    if (options.allowHealthCheck && c.req.path.endsWith("/health")) {
+    if (allowHealthCheck && c.req.path.endsWith("/health")) {
       return next();
     }
 

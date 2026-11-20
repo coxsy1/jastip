@@ -57,6 +57,16 @@ app.onError((err: any, c) => {
     return JsonResponse.notFound(c, "Data tidak ditemukan atau sudah dihapus");
   }
 
+  // Handle Prisma malformed UUID / invalid input format (P2023)
+  if (err?.code === "P2023") {
+    return JsonResponse.badRequest(
+      c,
+      "Format parameter ID tidak valid (harus berupa UUID)",
+      undefined,
+      ERROR_CODES.VALIDATION_ERROR
+    );
+  }
+
   // Generic fallback without leaking sensitive internal details
   const message = config.app.env === "development" ? err.message : "Terjadi kesalahan internal pada server";
   return JsonResponse.internalServerError(c, message, ERROR_CODES.INTERNAL_ERROR);

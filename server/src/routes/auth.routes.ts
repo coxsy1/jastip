@@ -6,16 +6,19 @@ import {
   loginSchema,
   registerSchema,
   changePasswordSchema,
+  refreshTokenSchema,
 } from "../validators/auth.validator.js";
+import { config } from "../config/index.js";
+import { ERROR_CODES } from "../constants/index.js";
 import { JsonResponse } from "../utils/response.js";
 
 const authRoutes = new Hono();
 
 // ==========================================
-// 1. PUBLIC ROUTES (TIDAK Butuh Autentikasi)
+// 1. PUBLIC ROUTES (Tidak Butuh Autentikasi)
 // ==========================================
 
-// Login endpoint with request body validation & rate limit
+// POST /auth/login — Rate limit + anti-enumeration ada di controller
 authRoutes.post(
   "/login",
   zValidator("json", loginSchema, (result, c) => {
@@ -26,9 +29,19 @@ authRoutes.post(
   (c) => authController.login(c)
 );
 
-// Register endpoint (for initial setup & testing; in PRD primary creation is via /users by Owner)
+// POST /auth/register — Diblokir di environment production (PRD USR-1)
 authRoutes.post(
   "/register",
+  (c, next) => {
+    if (config.app.env === "production") {
+      return JsonResponse.forbidden(
+        c,
+        "Registrasi publik dinonaktifkan. Akun baru hanya dapat dibuat oleh Owner via POST /api/v1/users",
+        ERROR_CODES.FORBIDDEN
+      );
+    }
+    return next();
+  },
   zValidator("json", registerSchema, (result, c) => {
     if (!result.success) {
       return JsonResponse.badRequest(c, "Validasi input registrasi gagal", result.error.issues);
@@ -37,17 +50,25 @@ authRoutes.post(
   (c) => authController.register(c)
 );
 
-// Refresh token rotation endpoint
-authRoutes.post("/refresh", (c) => authController.refreshToken(c));
+// POST /auth/refresh — Rotasi refresh token dengan validasi body
+authRoutes.post(
+  "/refresh",
+  zValidator("json", refreshTokenSchema, (result, c) => {
+    if (!result.success) {
+      return JsonResponse.badRequest(c, "Validasi refresh token gagal", result.error.issues);
+    }
+  }),
+  (c) => authController.refreshToken(c)
+);
 
 // ==========================================
-// 2. PROTECTED ROUTES (BUTUH Autentikasi)
+// 2. PROTECTED ROUTES (Butuh Autentikasi JWT)
 // ==========================================
 
-// User profile endpoint
+// GET /auth/me — Profil user saat ini
 authRoutes.get("/me", authenticate, (c) => authController.me(c));
 
-// Self-service password change endpoint (PRD AUTH-3)
+// PATCH /auth/me/password — Ganti password mandiri (PRD AUTH-3)
 authRoutes.patch(
   "/me/password",
   authenticate,
@@ -59,7 +80,7 @@ authRoutes.patch(
   (c) => authController.changePassword(c)
 );
 
-// User logout endpoint
+// POST /auth/logout — Revoke refresh token
 authRoutes.post("/logout", authenticate, (c) => authController.logout(c));
 
 export { authRoutes };

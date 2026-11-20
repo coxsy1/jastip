@@ -2,7 +2,7 @@ import type { Context } from "hono";
 import { JsonResponse } from "../utils/response.js";
 import { authService } from "../services/auth.service.js";
 import { loginRateLimiter } from "../utils/rate-limiter.js";
-import { ERROR_CODES, AUTH_CONSTANTS } from "../constants/index.js";
+import { ERROR_CODES } from "../constants/index.js";
 import { AppError } from "../utils/error.js";
 
 function getClientMeta(c: Context) {

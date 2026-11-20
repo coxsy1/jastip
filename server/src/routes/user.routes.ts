@@ -6,19 +6,20 @@ import {
   createUserSchema,
   updateUserSchema,
   updateUserStatusSchema,
+  resetPasswordSchema,
 } from "../validators/auth.validator.js";
 import { JsonResponse } from "../utils/response.js";
 import { USER_ROLES } from "../constants/index.js";
 
 const userRoutes = new Hono();
 
-// All routes under /users are strictly OWNER ONLY (PRD USR-1..4, AC2)
+// Semua route /users hanya untuk OWNER (PRD USR-1..4, AC2)
 userRoutes.use("*", authenticate, authorize(USER_ROLES.OWNER));
 
-// GET /users — List users
+// GET /users — Daftar user dengan filter & paginasi
 userRoutes.get("/", (c) => userController.list(c));
 
-// POST /users — Create user
+// POST /users — Buat user baru (password otomatis, mustChangePassword=true)
 userRoutes.post(
   "/",
   zValidator("json", createUserSchema, (result, c) => {
@@ -29,10 +30,10 @@ userRoutes.post(
   (c) => userController.create(c)
 );
 
-// GET /users/:id — Detail user
+// GET /users/:id — Detail user berdasarkan ID
 userRoutes.get("/:id", (c) => userController.getById(c));
 
-// PATCH /users/:id — Update user
+// PATCH /users/:id — Update data / role user
 userRoutes.patch(
   "/:id",
   zValidator("json", updateUserSchema, (result, c) => {
@@ -43,7 +44,7 @@ userRoutes.patch(
   (c) => userController.update(c)
 );
 
-// PATCH /users/:id/status — Toggle status
+// PATCH /users/:id/status — Aktif/nonaktifkan user (LAST_OWNER_PROTECTED)
 userRoutes.patch(
   "/:id/status",
   zValidator("json", updateUserStatusSchema, (result, c) => {
@@ -54,7 +55,15 @@ userRoutes.patch(
   (c) => userController.toggleStatus(c)
 );
 
-// POST /users/:id/reset-password — Reset password
-userRoutes.post("/:id/reset-password", (c) => userController.resetPassword(c));
+// POST /users/:id/reset-password — Reset password user (password sementara)
+userRoutes.post(
+  "/:id/reset-password",
+  zValidator("json", resetPasswordSchema, (result, c) => {
+    if (!result.success) {
+      return JsonResponse.badRequest(c, "Validasi reset password gagal", result.error.issues);
+    }
+  }),
+  (c) => userController.resetPassword(c)
+);
 
 export { userRoutes };
