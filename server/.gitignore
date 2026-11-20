@@ -1,0 +1,116 @@
+# ==========================================
+# JastipOps .gitignore
+# ==========================================
+
+# Dependencies
+node_modules/
+jspm_packages/
+bower_components/
+web_modules/
+.pnpm-store/
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+.yarn-integrity
+
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Database & Prisma
+/generated/
+/generated/prisma/
+*.sqlite
+*.sqlite3
+*.db
+
+# Production, Build & Framework Outputs
+dist/
+build/
+out/
+.next/
+.nuxt/
+.output/
+.nitro/
+.svelte-kit/
+.astro/
+.vuepress/dist/
+**/.vitepress/dist/
+.docusaurus/
+.serverless/
+.fusebox/
+.dynamodb/
+.firebase/
+
+# Logs & Runtime Diagnostics
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Testing & Code Coverage
+coverage/
+lib-cov/
+*.lcov
+.nyc_output/
+
+# Cache, Linter & Temporary Files
+.cache/
+.parcel-cache/
+.temp/
+.tmp/
+*.tmp
+.npm/
+.eslintcache
+.stylelintcache
+.node_repl_history
+*.tsbuildinfo
+.vite/
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+**/.vitepress/cache/
+.grunt/
+.lock-wscript
+.tern-port
+*.tgz
+
+# Monorepo Tools (Turbo / Nx)
+.turbo/
+.nx/cache/
+.nx/workspace-data/
+.nx/migrate-runs/
+
+# AI Tools & IDE Extensions
+.agents/
+.claude/
+.windsurf/
+.cursor/
+skills-lock.json
+
+# IDE & Editor Configurations
+.vscode/
+.vscode-test/
+.idea/
+*.swp
+*.swo
+
+# Operating System Junk
+.DS_Store
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini

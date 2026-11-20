@@ -1,0 +1,27 @@
+# ==========================================
+# JastipOps Application Configuration (YAML)
+# ==========================================
+# Values wrapped with ${VAR} or ${VAR:-default}
+# will be resolved from environment variables / .env file.
+
+app:
+  name: "JastipOps Server"
+  env: "${NODE_ENV:-development}"
+  port: ${PORT:-3000}
+  apiPrefix: "/api/v1"
+
+security:
+  apiKey: "${API_KEY}"
+
+database:
+  url: "${DATABASE_URL}"
+
+jwt:
+  accessSecret: "${JWT_ACCESS_SECRET}"
+  refreshSecret: "${JWT_REFRESH_SECRET}"
+  accessExpiresIn: "${JWT_ACCESS_EXPIRES_IN:-15m}"
+  refreshExpiresIn: "${JWT_REFRESH_EXPIRES_IN:-7d}"
+  bcryptSaltRounds: ${BCRYPT_SALT_ROUNDS:-12}
+
+cors:
+  origin: "${CORS_ORIGIN:-*}"
